@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Database Monitor</title>
+</head>
+<body>
+    <h1>Monitoraggio Database Luxottica</h1>
+    <p>L’app sta monitorando il database ogni 15 minuti per nuove righe.</p>
+    
+    <script>
+        // Parametri per accesso e URL dinamico
+        const user = "marcone";
+        const password = "15053256";
+        let previousData = localStorage.getItem("database") ? JSON.parse(localStorage.getItem("database")) : [];
+
+        // Funzione per formattare la data in 'yyyy-mm-dd'
+        function formatDate(offset = 0) {
+            const date = new Date();
+            date.setDate(date.getDate() + offset);
+            return date.toISOString().slice(0, 10);
+        }
+
+        // Funzione per generare l’URL completo
+        function generateURL() {
+            const todayDate = formatDate(0);
+            const yesterdayDate = formatDate(-4);
+            const timestamp = new Date().toISOString().replace("T", "_").replace(/:/g, "-").split(".")[0];
+            
+            return `https://mep.luxottica.com/XMII/Illuminator?QueryTemplate=IT50%2FAGO%2FQUERY%2FREPORTING%2FREPORT5&Param.1=${yesterdayDate}&Param.2=${todayDate}&Session=false&Content-Type=text%2Fcsv&j_user=${user}&j_password=${password}&timestamp=${timestamp}`;
+        }
+
+        // Funzione per inviare notifica su Teams
+        function notifyTeams(newData) {
+            fetch("WEBHOOK_URL_TEAMS", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: `Nuove righe rilevate: ${JSON.stringify(newData)}` })
+            }).then(() => console.log("Notifica inviata a Teams"));
+        }
+
+        // Funzione per controllare nuove righe e aggiornare i dati
+        async function checkForUpdates() {
+            const url = generateURL();
+            try {
+                const response = await fetch(url);
+                const data = await response.text(); // Assumendo il download sia CSV come indicato
+                if (data !== previousData) { // Confronto semplice, eventualmente più complesso per CSV
+                    notifyTeams(data);
+                    previousData = data;
+                    localStorage.setItem("database", JSON.stringify(data));
+                }
+            } catch (error) {
+                console.error("Errore nel download dei dati:", error);
+            }
+        }
+
+        // Avvio del controllo ogni 15 minuti
+        setInterval(checkForUpdates, 900000); // 900,000ms = 15 minuti
+        checkForUpdates(); // Esegui subito al caricamento
+    </script>
+</body>
+</html>
